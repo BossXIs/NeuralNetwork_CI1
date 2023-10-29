@@ -1,0 +1,193 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# อ่านไฟล์
+def read_file(filename='cross.txt'):
+    data = np.loadtxt(filename, dtype=float)
+    return data
+
+# แยกค่า input และ output
+def get_input_and_output(data):
+    input = data[:, :2]
+    output = data[:, -2:]
+    return input, output
+
+# ฟังก์ชันคำนวณ sigmoid
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+# ฟังก์ชันคำนวณ sigmoid derivative
+def sigmoid_derivative(x):
+    return x * (1 - x)
+
+# Feed-forward
+def feed_forward(input):
+    hidden = sigmoid(np.dot(w_i2h, input.T) + b_hidden)
+    output = sigmoid(np.dot(w_h2o, hidden) + b_output)
+    return hidden, output
+
+# Back-propagation output to hidden
+def back_propagation_o2h(hidden, output_gradient, learning_rate, momentum_rate):
+    global w_h2o, delta_w_h2o, b_output, delta_b_output
+    delta_w_h2o = (momentum_rate * delta_w_h2o) + (
+        learning_rate * np.dot(output_gradient, hidden.T) / len(hidden)
+    )
+    w_h2o += delta_w_h2o
+    delta_b_output = (momentum_rate * delta_b_output) + (
+        learning_rate * np.mean(output_gradient, axis=1, keepdims=True)
+    )
+    b_output += delta_b_output
+
+# Back-propagation hidden to input
+def back_propagation_h2i(input, hidden_gradient, learning_rate, momentum_rate):
+    global w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    delta_w_i2h = (momentum_rate * delta_w_i2h) + (
+        learning_rate * np.dot(hidden_gradient, input) / len(input)
+    )
+    w_i2h += delta_w_i2h
+    delta_b_hidden = (momentum_rate * delta_b_hidden) + (
+        learning_rate * np.mean(hidden_gradient, axis=1, keepdims=True)
+    )
+    b_hidden += delta_b_hidden
+
+# Train Neural Network
+def train_Neural_Network(input_data, output_data, target_MSE=0.00001, learning_rate=0.05, momentum_rate=0.8, limit_epochs=50000):
+    print(f'learning rate: {learning_rate} & momentum rate: {momentum_rate}')
+    for epochs in range(limit_epochs):
+        
+        hidden, output = feed_forward(input_data)
+        output_error = output_data - output.T
+        output_gradient = output_error.T * sigmoid_derivative(output)
+        back_propagation_o2h(hidden, output_gradient, learning_rate, momentum_rate)
+
+        hidden_error = np.dot(w_h2o.T, output_gradient)
+        hidden_gradient = hidden_error * sigmoid_derivative(hidden)
+        back_propagation_h2i(input_data, hidden_gradient, learning_rate, momentum_rate)
+
+        mse = np.mean(output_error ** 2, axis=0)
+        # ปรับค่า epoch ที่ต้องการให้แสดงใน terminal
+        if epochs % 1000 == 0:
+            print(f"Epoch : {epochs+1000}, MSE train data : {mse}")  
+
+        if np.all(mse < target_MSE):
+            break
+
+#คำนวณค่า Accuracy เป็นเปอร์เซ็นต์จากค่า True Positive (TP), True Negative (TN), False Positive (FP), และ False Negative (FN)
+def calculate_accuracy(TP, TN, FP, FN):
+    total_predictions = TP + TN + FP + FN
+    if total_predictions == 0:
+        return 0.0
+    accuracy_percentage = ((TP + TN) / total_predictions) * 100
+    return accuracy_percentage
+
+def plot_confusion_matrix(conf_matrix, title='Confusion Matrix'):
+    fig, ax = plt.subplots()
+    im = ax.imshow(conf_matrix, cmap='Blues')
+
+    # เพิ่ม annotations
+    for i in range(2):
+        for j in range(2):
+            ax.text(j, i, str(conf_matrix[i, j]), ha='center', va='center', color='black')
+
+    plt.xticks([0, 1], ['Predicted 0', 'Predicted 1'])
+    plt.yticks([0, 1], ['Actual 0', 'Actual 1'])
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.title(title)
+    plt.show()
+
+# k-fold cross-validation
+def k_fold_cross_validation(data, k):
+    global w_h2o, delta_w_h2o, b_output, delta_b_output, w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    global data_backup
+
+    # สร้าง indices สำหรับแบ่งข้อมูลเป็น k กลุ่ม
+    indices = np.arange(len(data))
+    np.random.shuffle(indices)
+    folds = np.array_split(indices, k)
+
+    for i in range(k):
+
+        # ใช้ค่า weights และ biases ที่ถูกสุ่มครั้งเดียว
+        initialize_weights_and_biases()
+
+        # แบ่งข้อมูลเป็น training set และ testing set
+        test_indices = folds[i]
+        train_indices = np.concatenate([f for j, f in enumerate(folds) if j != i])
+
+        train_data = data[train_indices]
+        test_data = data[test_indices]
+
+        # สร้างและฝึกแบบจำลอง
+        input_train, output_train = get_input_and_output(train_data)
+        input_test, output_test = get_input_and_output(test_data)
+
+        print(f"Fold {i+1}")
+        train_Neural_Network(input_train, output_train)
+
+        # ทดสอบและคำนวณ MSE
+        _, output_test_predicted = feed_forward(input_test)
+        
+        #แปลงข้อมูลจาก (2,20)->(20,2)
+        output_test_predicted = np.transpose(output_test_predicted)   
+        
+        # สร้าง confusion matrix
+        # กำหนดค่า Threshold เพื่อแปลงค่าความน่าจะเป็นเป็นค่าทางด้านไปหรือค่าทางด้านใน
+        threshold = 0.5
+        predicted = (output_test_predicted[:, 1] > threshold).astype(int)
+
+        # คำนวณ Confusion Matrix
+        confusion_matrix = np.zeros((2, 2), dtype=int)
+        for a in range(2):
+            for b in range(2):
+                confusion_matrix[a, b] = np.sum((output_test[:, a] == 1) & (predicted == b))
+
+        # แสดงผล Confusion Matrix
+        plot_confusion_matrix(confusion_matrix, title=f'Confusion Matrix - Fold {i+1}')
+
+
+        # คำนวณ True Positive (TP), True Negative (TN), False Positive (FP), และ False Negative (FN)
+        TP = confusion_matrix[1, 1]
+        TN = confusion_matrix[0, 0]
+        FP = confusion_matrix[0, 1]
+        FN = confusion_matrix[1, 0]
+        Accuracy = calculate_accuracy(TP, TN, FP, FN)
+        
+        # แสดงผล Accuracy
+        print("----------------------------------------------------------------------------------------------------")
+        print(f"Accuracy Fold {i+1}  = {Accuracy} % ")
+        print("----------------------------------------------------------------------------------------------------")
+
+        
+
+    
+
+# Function สำหรับ initialize weights และ biases
+def initialize_weights_and_biases():
+    global w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    global w_h2o, delta_w_h2o, b_output, delta_b_output
+
+    # Initialize weights และ biases แบบสุ่มค่า
+    w_i2h = np.random.randn(hidden_layer_size, input_layer_size)
+    delta_w_i2h = np.zeros_like(w_i2h)
+    b_hidden = np.random.randn(hidden_layer_size, 1)
+    delta_b_hidden = np.zeros_like(b_hidden)
+
+    w_h2o = np.random.randn(output_layer_size, hidden_layer_size)
+    delta_w_h2o = np.zeros_like(w_h2o)
+    b_output = np.random.randn(output_layer_size, 1)
+    delta_b_output = np.zeros_like(b_output)
+
+# Main
+data = read_file()
+data_backup = data
+
+
+input_layer_size = 2
+hidden_layer_size = 2
+output_layer_size = 2
+
+k=10
+
+# เทรนแบบ 10% cross validation
+k_fold_cross_validation(data, k)

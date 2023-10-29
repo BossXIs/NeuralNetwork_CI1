@@ -1,0 +1,219 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# อ่านไฟล์
+def read_file(filename='Flood_dataset.txt'):
+    data = np.loadtxt(filename, skiprows=2, dtype=int)
+    return data
+
+# แยกค่า input และ output
+def get_input_and_output(data):
+    input = data[:, :8]
+    output = data[:, 8]
+    return input, output
+
+# ฟังก์ชันคำนวณ sigmoid
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+# ฟังก์ชันคำนวณ sigmoid derivative
+def sigmoid_derivative(x):
+    return x * (1 - x)
+
+# แปลงค่าข้อมูลให้อยู่ในช่วง 0-1
+def normalize(data):
+    getmaxmin = np.array(data).flatten()
+    min_vals = np.min(getmaxmin)
+    max_vals = np.max(getmaxmin)
+    normalized_data = (data - min_vals) / (max_vals - min_vals)
+    return normalized_data
+
+# แปลงค่าข้อมูลจากที่อยู่ในช่วง 0-1 เป็น ฐานข้อมูลเดิม
+def denormalize(normalized_data, data):
+    getmaxmin = np.array(data).flatten()
+    min_vals = np.min(getmaxmin)
+    max_vals = np.max(getmaxmin)
+    denormalized_data = (normalized_data * (max_vals - min_vals)) + min_vals
+    return denormalized_data
+
+# Feed-forward
+def feed_forward(input):
+    hidden = sigmoid(np.dot(w_i2h, input.T) + b_hidden)
+    output = sigmoid(np.dot(w_h2o, hidden) + b_output)
+    return hidden, output
+
+# Back-propagation output to hidden
+def back_propagation_o2h(hidden, output_gradient, learning_rate, momentum_rate):
+    global w_h2o, delta_w_h2o, b_output, delta_b_output
+    delta_w_h2o = (momentum_rate * delta_w_h2o) + (
+        learning_rate * np.dot(output_gradient, hidden.T) / len(hidden)
+    )
+    w_h2o += delta_w_h2o
+    delta_b_output = (momentum_rate * delta_b_output) + (
+        learning_rate * np.mean(output_gradient, axis=1, keepdims=True)
+    )
+    b_output += delta_b_output
+
+# Back-propagation hidden to input
+def back_propagation_h2i(input, hidden_gradient, learning_rate, momentum_rate):
+    global w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    delta_w_i2h = (momentum_rate * delta_w_i2h) + (
+        learning_rate * np.dot(hidden_gradient, input) / len(input)
+    )
+    w_i2h += delta_w_i2h
+    delta_b_hidden = (momentum_rate * delta_b_hidden) + (
+        learning_rate * np.mean(hidden_gradient, axis=1, keepdims=True)
+    )
+    b_hidden += delta_b_hidden
+
+# Train Neural Network
+def train_Neural_Network(input_data, output_data, target_MSE=0.00001, learning_rate=0.1, momentum_rate=0.7, limit_epochs=50000):
+    print(f'learning rate: {learning_rate} & momentum rate: {momentum_rate}')
+    for epochs in range(limit_epochs):
+        
+        hidden, output = feed_forward(input_data)
+
+        output_error = output_data - output
+        output_gradient = output_error * sigmoid_derivative(output)
+        back_propagation_o2h(hidden, output_gradient, learning_rate, momentum_rate)
+
+        hidden_error = np.dot(w_h2o.T, output_gradient)
+        hidden_gradient = hidden_error * sigmoid_derivative(hidden)
+        back_propagation_h2i(input_data, hidden_gradient, learning_rate, momentum_rate)
+
+        mse = np.mean(output_error ** 2)
+        # ปรับค่า epoch ที่ต้องการให้แสดงใน terminal
+        if epochs % 1000 == 0:
+            print(f"Epoch : {epochs+1000}, MSE train data : {mse}")  
+
+        if mse < target_MSE:
+            break
+
+def calculate_accuracy(Desire, Actual):
+    # คำนวณความคลาดเคลื่อนร้อยละ
+    errors = np.abs((Desire - Actual) / Desire) * 100
+
+    # คำนวณค่า Accuracy โดยหาค่าเฉลี่ยของความถูกต้อง
+    Accuracy = 100 - np.mean(errors)
+    
+    return Accuracy
+
+def initialize_weights_and_biases():
+    global w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    global w_h2o, delta_w_h2o, b_output, delta_b_output
+    global w_i2h_0, w_h2o_0, b_hidden_0, b_output_0
+    global init0
+    
+    if init0 == False:
+        #print("start")
+        w_i2h_0 = np.random.randn(hidden_layer_size, input_layer_size)
+        w_h2o_0 = np.random.randn(output_layer_size, hidden_layer_size)
+        b_hidden_0 = np.random.randn(hidden_layer_size, 1)
+        b_output_0 = np.random.randn(output_layer_size, 1)
+        init0 = True
+    
+    w_i2h = w_i2h_0
+    w_h2o = w_h2o_0
+    b_hidden = b_hidden_0
+    b_output = b_output_0
+
+    
+    delta_w_i2h = np.zeros_like(w_i2h)
+    delta_w_h2o = np.zeros_like(delta_w_h2o)
+    delta_b_hidden = np.zeros_like(delta_b_hidden)
+    delta_b_output = np.zeros_like(delta_b_output)
+
+    return w_i2h, w_h2o, b_hidden, b_output
+
+# k-fold cross-validation
+def k_fold_cross_validation(data, k):
+    global w_h2o, delta_w_h2o, b_output, delta_b_output,w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
+    global w_i2h_0, w_h2o_0, b_hidden_0, b_output_0
+    global data_backup
+    global init0
+
+    # สร้าง indices สำหรับแบ่งข้อมูลเป็น k กลุ่ม
+    indices = np.arange(len(data))
+    np.random.shuffle(indices)
+    folds = np.array_split(indices, k)
+
+    total_mse = 0
+
+    for i in range(k):
+
+        # ใช้ค่า weights และ biases ที่ถูกสุ่มครั้งเดียว
+        initialize_weights_and_biases()
+
+        # แบ่งข้อมูลเป็น training set และ testing set
+        test_indices = folds[i]
+        train_indices = np.concatenate([f for j, f in enumerate(folds) if j != i])
+
+        train_data = data[train_indices]
+        test_data = data[test_indices]
+
+        # สร้างและฝึกแบบจำลอง
+        input_train, output_train = get_input_and_output(train_data)
+        input_test, output_test = get_input_and_output(test_data)
+
+        print(f"Fold {i+1}")
+        train_Neural_Network(input_train, output_train)
+
+        # ทดสอบและคำนวณ MSE
+        _, output_test_predicted = feed_forward(input_test)
+        error = output_test - output_test_predicted
+        mse = np.mean(error ** 2)
+        total_mse += mse
+        Out = denormalize(output_test_predicted,test_data)
+        
+        #นำข้อมูล Predict output จาก Out มาเก็บไว้ในตัวแปรใหม่
+        Actual = [item for sublist in Out for item in sublist]
+        #นำข้อมูล Desire output จาก test มาเก็บไว้ในตัวแปรใหม่
+        __,Desire = get_input_and_output(test_data)
+        
+        #หาค่าความแม่นยำ
+        Accuracy = calculate_accuracy(Desire,Actual)
+        
+        #แสดงผล
+        print("----------------------------------------------------------------------------------------------------")
+        print(f'MSE of test data Fold[{i+1}]: {mse}')
+        print(f"Accuracy = {Accuracy} % ")
+        print("----------------------------------------------------------------------------------------------------")
+
+        # พล็อตกราฟแท่ง
+        bar_width = 0.35  # กำหนดความกว้างของแท่ง
+
+        index = np.arange(len(output_test))  # สร้างชุด index สำหรับแท่ง
+
+        plt.bar(index, denormalize(output_test, data_backup), bar_width, label='Actual')
+        plt.bar(index + bar_width, denormalize(output_test_predicted[0], data_backup), bar_width, label='Desire')
+
+        # เพิ่มรายละเอียดและปรับแต่งกราฟ
+        plt.xlabel('Index')
+        plt.ylabel('Output')
+        plt.title('Actual vs Desire')
+        plt.xticks(index + bar_width / 2, range(len(output_test)))  # ปรับแต่งข้อความในแกน x
+        plt.legend()
+
+        # แสดงกราฟ
+        plt.show()
+
+    average_mse = total_mse / k
+    print(f"Average MSE cross {k} folds: {average_mse}")
+
+
+
+# Main
+data = read_file()
+data_backup = data
+normalized_data = normalize(data)
+init0 = False
+
+input_layer_size = 8
+hidden_layer_size = 8
+output_layer_size = 1
+
+k=10
+
+# เทรนแบบ 10% cross validation
+k_fold_cross_validation(normalized_data, k)
+
