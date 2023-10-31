@@ -51,8 +51,7 @@ def back_propagation_h2i(input, hidden_gradient, learning_rate, momentum_rate):
     b_hidden += delta_b_hidden
 
 # Train Neural Network
-def train_Neural_Network(input_data, output_data, target_MSE=0.00001, learning_rate=0.05, momentum_rate=0.8, limit_epochs=50000):
-    print(f'learning rate: {learning_rate} & momentum rate: {momentum_rate}')
+def train_Neural_Network(input_data, output_data, target_MSE, learning_rate, momentum_rate, limit_epochs):
     for epochs in range(limit_epochs):
         
         hidden, output = feed_forward(input_data)
@@ -89,15 +88,15 @@ def plot_confusion_matrix(conf_matrix, title='Confusion Matrix'):
         for j in range(2):
             ax.text(j, i, str(conf_matrix[i, j]), ha='center', va='center', color='black')
 
-    plt.xticks([0, 1], ['Predicted 0', 'Predicted 1'])
-    plt.yticks([0, 1], ['Actual 0', 'Actual 1'])
+    plt.xticks([False, True], ['Predicted False', 'Predicted True'])
+    plt.yticks([False, True], ['Actual False', 'Actual True'])
     plt.xlabel('Predicted Label')
-    plt.ylabel('True Label')
+    plt.ylabel('Actual Label')
     plt.title(title)
     plt.show()
 
 # k-fold cross-validation
-def k_fold_cross_validation(data, k):
+def k_fold_cross_validation(data, k, target_MSE, learning_rate, momentum_rate, limit_epochs):
     global w_h2o, delta_w_h2o, b_output, delta_b_output, w_i2h, delta_w_i2h, b_hidden, delta_b_hidden
     global data_backup
 
@@ -123,7 +122,7 @@ def k_fold_cross_validation(data, k):
         input_test, output_test = get_input_and_output(test_data)
 
         print(f"Fold {i+1}")
-        train_Neural_Network(input_train, output_train)
+        train_Neural_Network(input_train, output_train, target_MSE, learning_rate, momentum_rate, limit_epochs)
 
         # ทดสอบและคำนวณ MSE
         _, output_test_predicted = feed_forward(input_test)
@@ -187,7 +186,11 @@ input_layer_size = 2
 hidden_layer_size = 2
 output_layer_size = 2
 
+target_MSE=0.0000001 
+learning_rate=0.1
+momentum_rate=0.7
+limit_epochs= 50000
 k=10
 
 # เทรนแบบ 10% cross validation
-k_fold_cross_validation(data, k)
+k_fold_cross_validation(data, k, target_MSE, learning_rate, momentum_rate, limit_epochs)
